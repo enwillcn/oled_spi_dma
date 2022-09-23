@@ -11,6 +11,7 @@
 #include "stdlib.h"
 #include "oledfont.h"  
 #include "spi.h"
+#include "tim.h"
 #include "main.h"
 #include "dma.h"	 
 
@@ -18,13 +19,18 @@
 //#include "delay.h"
 
 #define RAM_SIZE 128*8
-uint8_t OLED_GRAM[132][8];
+//uint8_t OLED_GRAM[132][8];
+uint8_t OLED_GRAM[8][132];
 uint8_t OLED_GRAM_TRANS[8][132];
 
 void gram_trans(void);
 volatile uint8_t dma_counter = 0;
+volatile uint8_t dma_busy = 0;
+volatile uint16_t frame_count = 0;
+volatile uint16_t fps = 0;
 extern DMA_HandleTypeDef hdma_spi1_tx;
 uint32_t cpuCycleCount;
+
 
 //反显函数
 void OLED_ColorTurn(uint8_t i)
@@ -114,7 +120,7 @@ void OLED_Refresh(void)
 void OLED_Refresh_SPI(void)
 {	
 	//start_cycle_counter();
-	gram_trans();
+	//gram_trans();
 	//cpuCycleCount = stop_cycle_counter();
 
 // 	uint8_t i;												// work well for non-dma
@@ -128,14 +134,20 @@ void OLED_Refresh_SPI(void)
 // 	   HAL_SPI_Transmit(&hspi1,&OLED_GRAM_TRANS[i][0],132,1000);
 //   }
 	
-	dma_counter = 0;
+	while(dma_busy)
+	{
+		__NOP();	
+	}
+	dma_counter = 0;	
 	OLED_WR_Byte(0xb0+dma_counter,OLED_CMD); //设置行起始地址
 	OLED_WR_Byte(0x02,OLED_CMD);   //设置列起始地址低4位
 	OLED_WR_Byte(0x10,OLED_CMD);   //设置列起始地址高4位
 	
 	OLED_CS_Clr();
 	OLED_SDA_Set();
-	HAL_SPI_Transmit_DMA(&hspi1,&OLED_GRAM_TRANS[dma_counter][0],132);
+	HAL_SPI_Transmit_DMA(&hspi1,&OLED_GRAM[dma_counter][0],132);
+	//HAL_SPI_Transmit_DMA(&hspi1,&OLED_GRAM_TRANS[dma_counter][0],132);
+    dma_busy = 1;
 }
 //清屏函数
 void OLED_Clear(void)
@@ -161,12 +173,20 @@ void OLED_DrawPoint(uint8_t x,uint8_t y,uint8_t t)
 	i=y/8;
 	m=y%8;
 	n=1<<m;
-	if(t){OLED_GRAM[x][i]|=n;}
+	// if(t){OLED_GRAM[x][i]|=n;}
+	// else
+	// {
+	// 	OLED_GRAM[x][i]=~OLED_GRAM[x][i];
+	// 	OLED_GRAM[x][i]|=n;
+	// 	OLED_GRAM[x][i]=~OLED_GRAM[x][i];
+	// }
+
+	if(t){OLED_GRAM[i][x]|=n;}
 	else
 	{
-		OLED_GRAM[x][i]=~OLED_GRAM[x][i];
-		OLED_GRAM[x][i]|=n;
-		OLED_GRAM[x][i]=~OLED_GRAM[x][i];
+		OLED_GRAM[i][x]=~OLED_GRAM[i][x];
+		OLED_GRAM[i][x]|=n;
+		OLED_GRAM[i][x]=~OLED_GRAM[i][x];
 	}
 }
 
@@ -500,6 +520,7 @@ void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
 	/* Prevent unused argument(s) compilation warning */
 	UNUSED(hspi);
 	//if(__HAL_DMA_GET_IT_SOURCE(&hdma_spi1_tx,DMA_IT_TC))
+		start_cycle_counter();
 		dma_counter++;
 		if(dma_counter<8)
 		{
@@ -509,12 +530,24 @@ void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
 
 			OLED_CS_Clr();
 			OLED_SDA_Set();
-			HAL_SPI_Transmit_DMA(&hspi1,&OLED_GRAM_TRANS[dma_counter][0],132);
+			HAL_SPI_Transmit_DMA(&hspi1,&OLED_GRAM[dma_counter][0],132);
 		}
-
+		else
+		{
+			dma_busy = 0;
+			frame_count++;
+		}
+		cpuCycleCount = stop_cycle_counter();
 }
 
-
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	if(htim == &htim2)
+  	{
+		fps = frame_count;
+		frame_count = 0;
+  	}
+}
 
 
 

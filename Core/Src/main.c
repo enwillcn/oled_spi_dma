@@ -21,6 +21,7 @@
 #include "main.h"
 #include "dma.h"
 #include "spi.h"
+#include "tim.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -50,8 +51,10 @@
 /* USER CODE BEGIN PV */
 
 char mystr[128];
+char mystr2[128];
 uint16_t counter;
 uint32_t cpuCycleCount1;
+extern volatile uint16_t fps;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -95,15 +98,17 @@ int main(void)
     MX_GPIO_Init();
     MX_DMA_Init();
     MX_SPI1_Init();
-
+    MX_TIM2_Init();
     /* USER CODE BEGIN 2 */
     init_cycle_counter(true);
+    HAL_TIM_Base_Start_IT(&htim2);
+    __HAL_TIM_CLEAR_IT(&htim2, TIM_IT_UPDATE);
     OLED_Init();
 
-    OLED_ShowString(10, 1, "FlowMeter Mode", 16, 1);
-    OLED_DrawLine(0, 20, 130, 15, 1);
-    OLED_ShowString(2, 25, "Pulse num: ", 16, 1);
-    OLED_ShowString(2, 45, "Water: ", 16, 1);
+    OLED_ShowString(2, 1, "STM32F103 SPI+DMA", 12, 1);
+
+    OLED_ShowString(2, 25, "Num: ", 16, 1);
+    OLED_ShowString(2, 45, "FPS: ", 16, 1);
 
     OLED_Refresh_SPI();
 
@@ -114,19 +119,19 @@ int main(void)
     /* USER CODE BEGIN WHILE */
     while (1)
     {
-        
-		
-		counter++;
-		sprintf(mystr,"Counter: %d",counter);
-        start_cycle_counter();        
-		OLED_ShowString(2, 45, mystr, 16, 1);
+
+
+        counter++;
+        sprintf(mystr, "%d", fps);
+        sprintf(mystr2, "%d", counter);
+        start_cycle_counter();
+        OLED_ShowString(40, 25, mystr2, 16, 1);
+        OLED_ShowString(40, 45, mystr, 16, 1);
         cpuCycleCount1 = stop_cycle_counter();
-        
-		OLED_Refresh_SPI();
-		
+
+        OLED_Refresh_SPI();
         /* USER CODE END WHILE */
 
-        
         /* USER CODE BEGIN 3 */
     }
     /* USER CODE END 3 */
@@ -155,6 +160,7 @@ void SystemClock_Config(void)
     {
         Error_Handler();
     }
+
     /** Initializes the CPU, AHB and APB buses clocks
     */
     RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK
@@ -205,5 +211,3 @@ void assert_failed(uint8_t *file, uint32_t line)
     /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
-
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
